@@ -16,8 +16,10 @@
     <ul id="questions" class="space-y-2"></ul>
   </div>
   <script>
-    const evt = new EventSource('/sse');
+    const ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host);
     const list = document.getElementById('questions');
+    const state = [];
+
     document.getElementById('askForm').addEventListener('submit', e => {
       e.preventDefault();
       const input = document.getElementById('questionInput');
@@ -27,28 +29,30 @@
         input.value='';
       }
     });
-    evt.onmessage = event => {
+
+    ws.onmessage = event => {
       const msg = JSON.parse(event.data);
       if(msg.type === 'init'){
-        msg.questions.forEach(q => addQuestion(q));
+        state.splice(0, state.length, ...msg.questions);
       } else if(msg.type === 'question'){
-        addQuestion(msg.question);
+        state.push(msg.question);
       } else if(msg.type === 'update'){
-        updateQuestion(msg.question);
+        const q = state.find(x => x.id === msg.question.id);
+        if(q){ q.votes = msg.question.votes; }
       }
+      render();
     };
-    function addQuestion(q){
-      const li = document.createElement('li');
-      li.id = 'q-'+q.id;
-      li.className = 'bg-white p-4 rounded shadow flex justify-between items-center';
-      li.innerHTML = `<span class="text-lg">${q.text}</span><div class="flex items-center"><span class="votes mr-2">${q.votes}</span><button class="upvote bg-green-500 text-white px-2 rounded">▲</button></div>`;
-      li.querySelector('.upvote').addEventListener('click', () => fetch('/upvote', {method:'POST', body: JSON.stringify({id: q.id})}));
-      list.prepend(li);
-    }
-    function updateQuestion(q){
-      const li = document.getElementById('q-'+q.id);
-      if(li){
-        li.querySelector('.votes').textContent = q.votes;
+
+    function render(){
+      list.innerHTML = '';
+      state.sort((a,b) => b.votes - a.votes);
+      for(const q of state){
+        const li = document.createElement('li');
+        li.id = 'q-'+q.id;
+        li.className = 'bg-white p-4 rounded shadow flex justify-between items-center';
+        li.innerHTML = `<span class="text-lg">${q.text}</span><div class="flex items-center"><span class="votes mr-2">${q.votes}</span><button class="upvote bg-green-500 text-white px-2 rounded">▲</button></div>`;
+        li.querySelector('.upvote').addEventListener('click', () => fetch('/upvote', {method:'POST', body: JSON.stringify({id: q.id})}));
+        list.appendChild(li);
       }
     }
   </script>
