@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Live Q&A</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100">
+  <div class="max-w-2xl mx-auto p-4">
+    <h1 class="text-3xl font-bold text-center mb-6">Live Q&A</h1>
+    <form id="askForm" class="flex mb-4">
+      <input id="questionInput" class="flex-1 border border-gray-300 px-3 py-2 rounded-l" placeholder="Ask a question" />
+      <button class="bg-blue-500 text-white px-4 rounded-r">Send</button>
+    </form>
+    <ul id="questions" class="space-y-2"></ul>
+  </div>
+  <script>
+    const evt = new EventSource('/sse');
+    const list = document.getElementById('questions');
+    document.getElementById('askForm').addEventListener('submit', e => {
+      e.preventDefault();
+      const input = document.getElementById('questionInput');
+      const text = input.value.trim();
+      if(text){
+        fetch('/ask', { method:'POST', body: JSON.stringify({ text }) });
+        input.value='';
+      }
+    });
+    evt.onmessage = event => {
+      const msg = JSON.parse(event.data);
+      if(msg.type === 'init'){
+        msg.questions.forEach(q => addQuestion(q));
+      } else if(msg.type === 'question'){
+        addQuestion(msg.question);
+      } else if(msg.type === 'update'){
+        updateQuestion(msg.question);
+      }
+    };
+    function addQuestion(q){
+      const li = document.createElement('li');
+      li.id = 'q-'+q.id;
+      li.className = 'bg-white p-4 rounded shadow flex justify-between items-center';
+      li.innerHTML = `<span class="text-lg">${q.text}</span><div class="flex items-center"><span class="votes mr-2">${q.votes}</span><button class="upvote bg-green-500 text-white px-2 rounded">▲</button></div>`;
+      li.querySelector('.upvote').addEventListener('click', () => fetch('/upvote', {method:'POST', body: JSON.stringify({id: q.id})}));
+      list.prepend(li);
+    }
+    function updateQuestion(q){
+      const li = document.getElementById('q-'+q.id);
+      if(li){
+        li.querySelector('.votes').textContent = q.votes;
+      }
+    }
+  </script>
+</body>
+</html>
