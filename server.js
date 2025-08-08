@@ -1,8 +1,8 @@
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
+const WebSocket = require('ws');
 
-const clients = new Set();
 const questions = [];
 
 function sendFile(res, filePath, contentType){
@@ -16,25 +16,9 @@ function sendFile(res, filePath, contentType){
   });
 }
 
-function broadcast(msg){
-  const data = `data: ${JSON.stringify(msg)}\n\n`;
-  for (const client of clients){
-    client.write(data);
-  }
-}
-
 const server = http.createServer((req, res) => {
   if (req.method === 'GET' && req.url === '/'){
     sendFile(res, path.join(__dirname, 'public/index.html'), 'text/html');
-  } else if (req.method === 'GET' && req.url === '/sse'){
-    res.writeHead(200, {
-      'Content-Type': 'text/event-stream',
-      'Cache-Control': 'no-cache',
-      Connection: 'keep-alive'
-    });
-    clients.add(res);
-    res.write(`data: ${JSON.stringify({type: 'init', questions})}\n\n`);
-    req.on('close', () => clients.delete(res));
   } else if (req.method === 'POST' && req.url === '/ask'){
     let body = '';
     req.on('data', chunk => body += chunk);
@@ -78,6 +62,20 @@ const server = http.createServer((req, res) => {
     res.writeHead(404);
     res.end('Not found');
   }
+});
+
+const wss = new WebSocket.Server({ server });
+function broadcast(msg){
+  const data = JSON.stringify(msg);
+  for (const client of wss.clients){
+    if (client.readyState === WebSocket.OPEN){
+      client.send(data);
+    }
+  }
+}
+
+wss.on('connection', ws => {
+  ws.send(JSON.stringify({ type: 'init', questions }));
 });
 
 const PORT = process.env.PORT || 3000;
